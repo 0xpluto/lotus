@@ -249,6 +249,10 @@ func (a *API) dealStarter(ctx context.Context, params *api.StartDealParams, isSt
 		VerifiedDeal:         params.VerifiedDeal,
 	}
 
+	if dealProposal.VerifiedDeal {
+		return nil, xerrors.Errorf("verified deals not supported")
+	}
+
 	if dealProposal.ProviderCollateral.IsZero() {
 		networkCollateral, err := a.StateDealProviderCollateralBounds(ctx, params.Data.PieceSize.Padded(), params.VerifiedDeal, types.EmptyTSK)
 		if err != nil {

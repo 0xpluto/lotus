@@ -1,6 +1,7 @@
 package messagepool
 
 import (
+	"bytes"
 	"context"
 	"math/big"
 	"math/rand"
@@ -13,8 +14,10 @@ import (
 	"github.com/filecoin-project/go-address"
 	tbig "github.com/filecoin-project/go-state-types/big"
 	"github.com/filecoin-project/go-state-types/crypto"
+	market2 "github.com/filecoin-project/specs-actors/v2/actors/builtin/market"
 
 	"github.com/filecoin-project/lotus/build"
+	"github.com/filecoin-project/lotus/chain/actors/builtin/market"
 	"github.com/filecoin-project/lotus/chain/messagepool/gasguess"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/chain/vm"
@@ -721,17 +724,34 @@ func (mp *MessagePool) getPendingMessages(ctx context.Context, curTs, ts *types.
 
 	mp.forEachPending(func(a address.Address, mset *msgSet) {
 		if inSync {
+
+
 			// no need to copy the map
 			result[a] = mset.msgs
 		} else {
 			// we need to copy the map to avoid clobbering it as we load more messages
 			msetCopy := make(map[uint64]*types.SignedMessage, len(mset.msgs))
+			outer:
 			for nonce, m := range mset.msgs {
-				msetCopy[nonce] = m
+				if m.Message.Method == market.Methods.PublishStorageDeals {
+					var pubDealsParams market2.PublishStorageDealsParams
+					if err := pubDealsParams.UnmarshalCBOR(bytes.NewReader(m.Message.Params)); err != nil {
+						log.Warnf("failed to unmarshal publish deals params: %s", err)
+						continue
+					}
+					for _, deal := range pubDealsParams.Deals {
+						if deal.Proposal.VerifiedDeal {
+							continue outer
+						}
+					}
+				} else {
+					msetCopy[nonce] = m
+				}
 			}
 			result[a] = msetCopy
 
 		}
+
 	})
 
 	// we are in sync, that's the happy path
